@@ -5,27 +5,29 @@ import org.apache.spark.sql.{SparkSession, DataFrame}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions.{col, from_json, current_timestamp}
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.SparkConf
 
 object Main {
   val spark = SparkSession
     .builder()
-    .appName("SparkScala")
+    .appName("KafkaConsumer")
     .getOrCreate()
 
   def main(args: Array[String]): Unit = {
     // Development options
-    val options = Map(
-      "kafka.bootstrap.servers" -> "localhost:29091,localhost:29092,localhost:29093",
-      "subscribe" -> "foobar",
-      "startingOffsets" -> "latest"
-    )
-
-    // Production options
     // val options = Map(
-    //   "kafka.bootstrap.servers" -> "10.1.8.29:9092,10.1.8.30:9092,10.1.8.31:9092",
-    //   "subscribe" -> "weather-data",
+    //   "kafka.bootstrap.servers" -> "localhost:29091,localhost:29092,localhost:29093",
+    //   "subscribe" -> "foobar",
     //   "startingOffsets" -> "latest"
     // )
+
+    // Production options
+    val options = Map(
+      "kafka.bootstrap.servers" -> "10.1.8.29:9092,10.1.8.30:9092,10.1.8.31:9092",
+      "subscribe" -> "weather-data",
+      "failOnDataLoss" -> "false"
+      // "startingOffsets" -> "latest"
+    )
 
     val stationDF = getStationDF()
 
@@ -61,19 +63,19 @@ object Main {
       .drop("infoStationCode")
 
     // Local development codes
-    val query = processedDF.writeStream
-      .format("parquet")
-      .option("checkpointLocation", "/Users/ducth/scala/SparkScala/checkpoint")
-      .option("path", "/Users/ducth/scala/SparkScala/weatherData")
-      .trigger(Trigger.ProcessingTime("20 seconds"))
-      .start()
-
     // val query = processedDF.writeStream
     //   .format("parquet")
-    //   .option("checkpointLocation", "hdfs://master:9090/checkpoint")
-    //   .option("path", "hdfs://master:9090/weatherData")
-    //   .trigger(Trigger.ProcessingTime("30 seconds"))
+    //   .option("checkpointLocation", "/Users/ducth/scala/SparkScala/checkpoint")
+    //   .option("path", "/Users/ducth/scala/SparkScala/weatherData")
+    //   .trigger(Trigger.ProcessingTime("20 seconds"))
     //   .start()
+
+    val query = processedDF.writeStream
+      .format("parquet")
+      .option("checkpointLocation", "hdfs://master:9000/checkpoint")
+      .option("path", "hdfs://master:9000/WeatherData")
+      .trigger(Trigger.ProcessingTime("60 seconds"))
+      .start()
 
     query.awaitTermination()
   }
@@ -84,10 +86,16 @@ object Main {
       .add("Latitude", DoubleType)
       .add("Longitude", DoubleType)
 
+    // spark.read
+    //   .option("header", "true")
+    //   .schema(stationInfoSchema)
+    //   .csv("/Users/ducth/scala/SparkScala/station_info.csv")
+    //   .withColumnRenamed("StationCode", "infoStationCode")
+
     spark.read
       .option("header", "true")
       .schema(stationInfoSchema)
-      .csv("/Users/ducth/scala/SparkScala/station_info.csv")
+      .csv("hdfs://master:9000/station_info.csv")
       .withColumnRenamed("StationCode", "infoStationCode")
   }
 }
